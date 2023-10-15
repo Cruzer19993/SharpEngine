@@ -6,18 +6,19 @@ using System.Threading.Tasks;
 using OpenTK.Mathematics;
 using OpenTK.Graphics.OpenGL4;
 
-namespace SharpEngine
+namespace SharpEngine.ECS
 {
     public class Transform : Component
     {
-        public Vector3 Position;
-        public Vector3 Scale;
+        public Vector3 Position = Vector3.Zero;
+        public Vector3 Scale = Vector3.One;
         public Quaternion Rotation;
         public Transform()
         {
             Position = new();
             Rotation = new();
         }
+        
         public Transform(float x, float y, float z)
         {
             Vector3 temp = new Vector3(x,y,z);

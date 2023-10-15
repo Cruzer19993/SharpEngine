@@ -14,33 +14,32 @@ using OpenTK.Mathematics;
 using OpenGLGame;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Game;
+using SharpEngine.SceneManagment;
+using SharpEngine.ECS;
 
-namespace SharpEngine
+namespace SharpEngine.Rendering
 {
     internal class RenderSystem : GameWindow
     {
         public static RenderSystem instance;
         public static bool isDoneLoading = false;
         public static bool isRenderingFrame = false;
+        public EventHandler OnUpdateEvent;
 
         Shader shader; //current used shader
         Texture texture; //current used texture;
-        Texture defaultTexture;
+        Texture defaultTexture; //used when no texutre assigned on Material Component.
 
-        public Camera mainCamera = new Camera(0.5f);
-        public List<Entity> objectsToRender = new();
-        //Game Scene
-        public GameScene currentScene = new GameScene();
-        //DEBUG
-        public Entity test;
-        public double Timer;
-        public int Counter;
+        public Entity mainCameraEntity;
+        GameScene currentScene;
+        List<Entity> objectsToRender = new();
+        Vector2 startResolution;
+        Vector3 cameraTranslationFactor;
         //BUFFERS
         Matrix4 viewMatrix;
         Matrix4 projMatrix;
         Matrix4[] modelMatrixes;
-        DrawElementsIndirectCommand[] drawCommands;
+        DrawElementsIndirectCommand[] drawCommands = new DrawElementsIndirectCommand[0];
         int IndirectBuffer;
         int m_elementBufferObject;
         int ElementBufferObject
@@ -64,8 +63,9 @@ namespace SharpEngine
         {
             0, 1, 3, 1, 2, 3,
         };
-        public RenderSystem(int width, int height, string title) : base(GameWindowSettings.Default, new NativeWindowSettings() { Size = (width, height), Title = title}) {
+        public RenderSystem(int width, int height, string title,int AspectRatioX, int AspectRatioY) : base(GameWindowSettings.Default, new NativeWindowSettings() { Size = (width, height), Title = title,AspectRatio = (AspectRatioX,AspectRatioY)}) {
             instance = this;
+            startResolution = new Vector2(width, height);
         }
 
         protected override void OnLoad()
@@ -74,8 +74,6 @@ namespace SharpEngine
 
             shader = new Shader("D:\\Projekty\\VisualStudio\\OpenGLGame\\OpenGLGame\\Engine\\Shaders\\GLSL\\VertexShaders\\DefaultVertex.vert", "D:\\Projekty\\VisualStudio\\OpenGLGame\\OpenGLGame\\Engine\\Shaders\\GLSL\\FragmentShaders\\DefaultFragment.frag");
             defaultTexture = new Texture("D:\\Projekty\\VisualStudio\\OpenGLGame\\OpenGLGame\\Engine\\DebugAssets\\crateTexture.jpg");
-            viewMatrix = mainCamera.GetCameraViewMatrix();
-            projMatrix = mainCamera.GetCameraProjectionMatrix();
 
             matrixSSBO = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ShaderStorageBuffer, matrixSSBO);
@@ -103,15 +101,19 @@ namespace SharpEngine
             IndirectBuffer = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer, IndirectBuffer);
             GL.BufferData(BufferTarget.DrawIndirectBuffer, 4096 * Marshal.SizeOf<DrawElementsIndirectCommand>(), IntPtr.Zero, BufferUsageHint.StaticDraw);
-
-            SetScene(currentScene);
-
+            SceneManager.Instance.SceneChangedEvent += (delegate { OnSceneChange(); });
             isDoneLoading = true;
         }
 
         protected override void OnRenderFrame(FrameEventArgs args)
         {
             base.OnRenderFrame(args);
+            if (AspectRatio.HasValue && currentScene != null)
+            {
+                //TODO: Make the translation factor respond to diffirent resolutions
+                cameraTranslationFactor = new Vector3((AspectRatio.Value.numerator / startResolution.X) * (1 / mainCameraEntity.GetComponent<Camera>().cameraZoom), (AspectRatio.Value.denominator / startResolution.Y) * (1 / mainCameraEntity.GetComponent<Camera>().cameraZoom), 1f);
+                Console.WriteLine(cameraTranslationFactor.ToString());
+            }
             Render();
             GL.DebugMessageCallback((source, type, id, severity, length, message, userParam) =>
             {
@@ -136,6 +138,7 @@ namespace SharpEngine
         protected override void OnUpdateFrame(FrameEventArgs args)
         {
             base.OnUpdateFrame(args);
+            if (currentScene == null) return;
             UpdateModelMatrixes();
             if (previousFrameObjectCount == -1)
             {
@@ -148,32 +151,14 @@ namespace SharpEngine
             }
             if (KeyboardState.IsKeyPressed(Keys.C))
             {
-                Entity temp = new Entity("Test Entity Created");
+                Entity temp = new Entity("Test Entity");
                 Random rand = new Random();
-                temp.GetComponent<Transform>().Position = new Vector3((float)rand.Next(-6,6),0f,1f);
-                currentScene.SpawnEntity(temp);
-            }
-            if (KeyboardState.IsKeyDown(Keys.A))
-            {
-                mainCamera.m_transform.Position += Vector3.UnitX * 5*(float)args.Time;
-            }
-            if (KeyboardState.IsKeyDown(Keys.D))
-            {
-                mainCamera.m_transform.Position -= Vector3.UnitX * 5 * (float)args.Time;
-            }
-            if (KeyboardState.IsKeyDown(Keys.W))
-            {
-                mainCamera.m_transform.Position -= Vector3.UnitY * 5 * (float)args.Time;
-            }
-            if (KeyboardState.IsKeyDown(Keys.S))
-            {
-                mainCamera.m_transform.Position += Vector3.UnitY * 5 * (float)args.Time;
+                temp.GetComponent<Transform>().Position = new Vector3((float)rand.Next(-6,6)*10,0f,1f);
             }
         }
 
         void CreateIndirectBufferCommands()
         {
-            Console.WriteLine("Creating Indirect Commands, objects to render: " + objectsToRender.Count);
             drawCommands = new DrawElementsIndirectCommand[1];
 
             drawCommands[0] = new DrawElementsIndirectCommand
@@ -192,11 +177,11 @@ namespace SharpEngine
         {
             modelMatrixes = new Matrix4[objectsToRender.Count*3];
             uint offset = 0;
-            Matrix4 currentProjMatirx = mainCamera.GetCameraProjectionMatrix();
-            Matrix4 currentViewMatrix = mainCamera.GetCameraViewMatrix();
+            Matrix4 currentProjMatirx = mainCameraEntity.GetComponent<Camera>().GetCameraProjectionMatrix();
+            Matrix4 currentViewMatrix = mainCameraEntity.GetComponent<Camera>().GetCameraViewMatrix();
             for(int i=0;i<objectsToRender.Count; i++)
             {
-                modelMatrixes[0 + offset] = Matrix4.CreateTranslation(objectsToRender[i].GetComponent<Transform>().Position);
+                modelMatrixes[0 + offset] = Matrix4.CreateTranslation(objectsToRender[i].GetComponent<Transform>().Position * cameraTranslationFactor);
                 modelMatrixes[1 + offset] = currentViewMatrix;
                 modelMatrixes[2 + offset] = currentProjMatirx;
                 offset += 3;
@@ -213,11 +198,13 @@ namespace SharpEngine
             base.OnResize(e);
             GL.Viewport(0, 0, e.Width, e.Height);
         }
-
-        public void SetScene(GameScene scene)
+        public void OnSceneChange()
         {
-            currentScene = scene;
+            Console.WriteLine("Scene Changed");
+            currentScene = SceneManager.Instance.GetActiveScene();
             currentScene.EntitiesChangedEvent += (delegate { UpdateRenderObjects(); });
+            mainCameraEntity = currentScene.GetEntitiesWithComponents(typeof(Transform), typeof(Camera)).ToArray()[0];
+            UpdateRenderObjects();
         }
         public async void UpdateRenderObjects()
         {
@@ -225,7 +212,7 @@ namespace SharpEngine
             {
                 while (isRenderingFrame)
                 {
-                    Console.WriteLine("Waiting for the frame rendering to end");
+
                 }
             });
             lock (objectsToRender)
