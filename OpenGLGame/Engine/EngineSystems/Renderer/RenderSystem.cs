@@ -112,7 +112,7 @@ namespace SharpEngine.Rendering
             {
                 //TODO: Make the translation factor respond to diffirent resolutions
                 cameraTranslationFactor = new Vector3((AspectRatio.Value.numerator / startResolution.X) * (1 / mainCameraEntity.GetComponent<Camera>().cameraZoom), (AspectRatio.Value.denominator / startResolution.Y) * (1 / mainCameraEntity.GetComponent<Camera>().cameraZoom), 1f);
-                Console.WriteLine(cameraTranslationFactor.ToString());
+                //Console.WriteLine(cameraTranslationFactor.ToString());
             }
             Render();
             GL.DebugMessageCallback((source, type, id, severity, length, message, userParam) =>
@@ -155,6 +155,7 @@ namespace SharpEngine.Rendering
                 Random rand = new Random();
                 temp.GetComponent<Transform>().Position = new Vector3((float)rand.Next(-6,6)*10,0f,1f);
             }
+            OnUpdateEvent.Invoke(this, EventArgs.Empty);
         }
 
         void CreateIndirectBufferCommands()

@@ -14,6 +14,7 @@ namespace Sandbox
     public class Sandbox : Game
     {
         GameScene sandboxScene;
+        Entity playerEntity;
         static void Main(string[] args)
         {
             Instance = new Sandbox();
@@ -28,7 +29,10 @@ namespace Sandbox
         }
         public override void OnStart()
         {
-
+            playerEntity = new Entity("Player");
+            playerEntity.AddComponent(new PlayerComponent());
+            sandboxScene.SpawnEntity(playerEntity);
+            ECSManager.InitializeSystems(new PlayerMovementSystem());
         }
 
         public override void OnUpdate()
@@ -37,7 +41,22 @@ namespace Sandbox
         }
     }
 
-    public class CameraMovementSystem : ECSSystem
+    public class PlayerMovementSystem : ECSSystem
+    {
+        public PlayerMovementSystem()
+        {
+            neededComponents = new Type[] { typeof(PlayerComponent), typeof(Transform) };
+        }
+        public override void OnUpdate()
+        {
+            foreach(Entity x in attachedEntities)
+            {
+                x.GetComponent<Transform>().Position += Vector3.UnitX * 0.1f;
+            }
+        }
+    }
+
+    public class PlayerComponent : Component
     {
 
     }
